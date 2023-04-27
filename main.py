@@ -4,17 +4,24 @@ import random
 pygame.init()
 pygame.font.init()
 
-PLAYER_SPRITE = pygame.image.load('data/player.png')
+PLAYER_SPRITE = pygame.image.load('data/vfx/player.png')
 MOB_SPRITES = [pygame.image.load(
-    'data/mob.png'), pygame.image.load('data/mob_2.png'), pygame.image.load('data/mob_3.png')]
-COIN_SPRITE = pygame.image.load('data/coin.png')
-BUTTON_IMAGE = pygame.image.load('data/button.png')
-START_IMAGE = pygame.image.load('data/start_button.png')
-NULL_INDICATOR_IMAGE = pygame.image.load('data/null_indicator.png')
-SPEED_INDICATOR_IMAGE = pygame.image.load('data/shooting_speed_indicator.png')
-VELOCITY_INDICATOR_IMAGE = pygame.image.load('data/velocity_indicator.png')
+    'data/vfx/mob.png'), pygame.image.load('data/vfx/mob_2.png'), pygame.image.load('data/vfx/mob_3.png')]
+COIN_SPRITE = pygame.image.load('data/vfx/coin.png')
+BUTTON_IMAGE = pygame.image.load('data/vfx/button.png')
+START_IMAGE = pygame.image.load('data/vfx/start_button.png')
+NULL_INDICATOR_IMAGE = pygame.image.load('data/vfx/null_indicator.png')
+SPEED_INDICATOR_IMAGE = pygame.image.load(
+    'data/vfx/shooting_speed_indicator.png')
+VELOCITY_INDICATOR_IMAGE = pygame.image.load('data/vfx/velocity_indicator.png')
 
 FONT = pygame.font.SysFont(pygame.font.get_default_font(), 40)
+
+COIN_SOUND = pygame.mixer.Sound('data/sfx/coin.wav')
+LASER_SOUND = pygame.mixer.Sound('data/sfx/laser.wav')
+HIT_SOUND = pygame.mixer.Sound('data/sfx/hit.wav')
+LEVELUP_SOUND = pygame.mixer.Sound('data/sfx/levelup.wav')
+NO_SOUND = pygame.mixer.Sound('data/sfx/no.wav')
 
 WIDTH, HEIGHT = 1240, 660
 WHITE = (255, 255, 255)
@@ -187,28 +194,36 @@ while running:
             player.rect.y += player.vel
         if keys[pygame.K_SPACE]:
             if had_shot > SHOT_INTERVAL:
+                LASER_SOUND.play()
                 shots.append(Shot(
                     (player.rect.x + player.size[0]//2, player.rect.y), player.shot_vel))
                 had_shot = 0
         had_shot += 1
-
+        
+        shot_rects = pygame.sprite.Group(*shots)
+        for mob in mobs:
+            mob.rect.y += mob.vel
+            if shot := pygame.sprite.spritecollideany(mob, shot_rects):
+                coins.append(Coin(mob.rect.center, 1))
+                HIT_SOUND.play()
+                mobs.remove(mob)
+                try:
+                    shots.remove(shot)
+                except ValueError as err:
+                    print(err)
+                    
+        
         for shot in shots:
             if shot.position.y > 0:
                 shot.position.y -= shot.vel
             else:
                 shots.pop(shots.index(shot))
 
-        shot_rects = pygame.sprite.Group(*shots)
-        for mob in mobs:
-            mob.rect.y += mob.vel
-            if shot := pygame.sprite.spritecollideany(mob, shot_rects):
-                coins.append(Coin(mob.rect.center, 1))
-                mobs.remove(mob)
-                shots.remove(shot)
 
         for coin in coins:
             coin.rect.y += coin.vel
             if pygame.sprite.collide_rect(player, coin):
+                COIN_SOUND.play()
                 money += coin.value
                 coins.remove(coin)
 
@@ -222,10 +237,10 @@ while running:
         if spawned > spawn_wait:
             spawn_mob()
             spawned = 0
-            spawn_wait = spawn_wait * 0.96              
+            spawn_wait = spawn_wait * 0.96
 
         draw_game()
-
+        
     else:
         window.fill(SHOP_BG_COLOR)
 
@@ -244,16 +259,21 @@ while running:
                     dead = False
                 else:
                     for button in upgrade_buttons:
-                        if button.rect.collidepoint((mouseX, mouseY)) and button.price <= money:
-                            money -= button.price
-                            button.price = round(button.price * 1.8)
-                            button.level += 1
-                            if upgrade_buttons.index(button) == 0:
-                                player.vel = round(player.vel * 1.3)
-                            elif upgrade_buttons.index(button) == 1:
-                                SHOT_INTERVAL = round(SHOT_INTERVAL * 0.8)
-                            elif upgrade_buttons.index(button) == 2:
-                                player.shot_vel = round(player.shot_vel * 1.3)
+                        if button.rect.collidepoint((mouseX, mouseY)):
+                            if button.price <= money:
+                                LEVELUP_SOUND.play()
+                                money -= button.price
+                                button.price = round(button.price * 1.8)
+                                button.level += 1
+                                if upgrade_buttons.index(button) == 0:
+                                    player.vel = round(player.vel * 1.3)
+                                elif upgrade_buttons.index(button) == 1:
+                                    SHOT_INTERVAL = round(SHOT_INTERVAL * 0.8)
+                                elif upgrade_buttons.index(button) == 2:
+                                    player.shot_vel = round(
+                                        player.shot_vel * 1.3)
+                            else:
+                                NO_SOUND.play()
 
             elif e.type == pygame.QUIT:
                 running = False
@@ -267,9 +287,11 @@ while running:
             # DISPLAY.blit(button.sprite, (220 + (buttons.index(button)*125), 393))
             priceText = FONT.render(str(button.price), True, YELLOW)
             window.blit(priceText, (42 + button.rect.x, button.rect.y + 20))
-            levelText = FONT.render('Lvl. ' + str(button.level), True, (100,100,100))
+            levelText = FONT.render(
+                'Lvl. ' + str(button.level), True, (100, 100, 100))
             window.blit(levelText, (14 + button.rect.x, button.rect.y + 48))
-            window.blit(button.typeIndicatorSprite, (-18 + button.rect.x, button.rect.y))
+            window.blit(button.typeIndicatorSprite,
+                        (-18 + button.rect.x, button.rect.y))
 
         pygame.display.update()
 
